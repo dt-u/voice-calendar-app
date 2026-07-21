@@ -7,7 +7,21 @@ import { Mascot } from './Mascot';
 
 export const MascotOverlay: React.FC = () => {
   const [mascotState, setMascotState] = useState<MascotState>('IDLE');
+  const [aiMascotUrl, setAiMascotUrl] = useState('https://api.dicebear.com/7.x/bottts/svg?seed=Calendar&backgroundColor=transparent');
   const { playAudio } = useAudioPlayer();
+
+  useEffect(() => {
+    const savedUrl = localStorage.getItem('aiMascotUrl');
+    if (savedUrl) setAiMascotUrl(savedUrl);
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'aiMascotUrl' && e.newValue) {
+        setAiMascotUrl(e.newValue);
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   const handleAudioReceived = useCallback((audioData: ArrayBuffer) => {
     setMascotState('SPEAKING');
@@ -61,7 +75,7 @@ export const MascotOverlay: React.FC = () => {
             Offline
           </div>
         )}
-        <Mascot state={mascotState} />
+        <Mascot state={mascotState} url={aiMascotUrl} />
       </div>
     </div>
   );

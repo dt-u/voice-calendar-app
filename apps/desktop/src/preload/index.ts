@@ -8,7 +8,10 @@ const api = {
   removeSttListeners: () => {
     ipcRenderer.removeAllListeners('STT_START')
     ipcRenderer.removeAllListeners('STT_STOP')
-  }
+  },
+  minimizeWindow: () => ipcRenderer.send('window-minimize'),
+  maximizeWindow: () => ipcRenderer.send('window-maximize'),
+  closeWindow: () => ipcRenderer.send('window-close')
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

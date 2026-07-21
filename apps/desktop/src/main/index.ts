@@ -1,21 +1,23 @@
-import { app, shell, BrowserWindow, Tray, Menu, globalShortcut, screen } from 'electron'
+import { app, shell, BrowserWindow, Tray, Menu, globalShortcut, screen, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 
 let dashboardWindow: BrowserWindow | null = null
-let mascotWindow: BrowserWindow | null = null
+let aiMascotWindow: BrowserWindow | null = null
+let userMascotWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isAppQuitting = false
 
 function createWindows(): void {
   const primaryDisplay = screen.getPrimaryDisplay()
   const { width, height } = primaryDisplay.workAreaSize
-  const MASCOT_WIDTH = 120;
-  const MASCOT_HEIGHT = 160;
+  const MASCOT_WIDTH = 100;
+  const MASCOT_HEIGHT = 120;
 
   // 1. Mascot Overlay Window (Transparent, always-on-top, click-through)
-  mascotWindow = new BrowserWindow({
+  // 1. AI Mascot Overlay Window (Transparent, always-on-top, bottom-right)
+  aiMascotWindow = new BrowserWindow({
     width: MASCOT_WIDTH,
     height: MASCOT_HEIGHT,
     x: width - MASCOT_WIDTH - 20,
@@ -35,12 +37,36 @@ function createWindows(): void {
     }
   })
 
+  // 2. User Mascot Overlay Window (Transparent, always-on-top, bottom-left)
+  userMascotWindow = new BrowserWindow({
+    width: MASCOT_WIDTH,
+    height: MASCOT_HEIGHT,
+    x: 20,
+    y: height - MASCOT_HEIGHT - 20,
+    show: false,
+    autoHideMenuBar: true,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    hasShadow: false,
+    resizable: false,
+    ...(process.platform === 'linux' ? { icon } : {}),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      additionalArguments: ['--window-type=user-mascot']
+    }
+  })
+
   // 2. Main Calendar Dashboard Window
   dashboardWindow = new BrowserWindow({
     width: 1100,
     height: 800,
     show: false,
     autoHideMenuBar: true,
+    transparent: true,
+    frame: false,
+    hasShadow: false,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -51,21 +77,21 @@ function createWindows(): void {
 
   dashboardWindow.on('ready-to-show', () => {
     dashboardWindow?.show()
-    dashboardWindow?.webContents.openDevTools({ mode: 'right' })
+    // dashboardWindow?.webContents.openDevTools({ mode: 'right' }) // Disabled by user request
   })
 
-  // When dashboard is closed or minimized, show the Mascot instead
+  // When dashboard is closed or minimized, show the AI Mascot instead
   dashboardWindow.on('close', (e) => {
     if (!isAppQuitting) {
       e.preventDefault()
       dashboardWindow?.hide()
-      mascotWindow?.show()
+      aiMascotWindow?.show()
     }
   })
 
   dashboardWindow.on('minimize', () => {
     dashboardWindow?.hide()
-    mascotWindow?.show()
+    aiMascotWindow?.show()
   })
 
   const handleOpenUrl = (details) => {
@@ -74,7 +100,8 @@ function createWindows(): void {
   }
   
   dashboardWindow.webContents.setWindowOpenHandler(handleOpenUrl)
-  mascotWindow.webContents.setWindowOpenHandler(handleOpenUrl)
+  aiMascotWindow.webContents.setWindowOpenHandler(handleOpenUrl)
+  userMascotWindow.webContents.setWindowOpenHandler(handleOpenUrl)
 
   // Load the respective URLs
   const loadContent = (win: BrowserWindow, hash: string) => {
@@ -86,14 +113,15 @@ function createWindows(): void {
   }
 
   loadContent(dashboardWindow, 'dashboard')
-  loadContent(mascotWindow, 'mascot')
+  loadContent(aiMascotWindow, 'mascot')
+  loadContent(userMascotWindow, 'user-mascot')
 }
 
 function createTray() {
   tray = new Tray(icon)
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Show Dashboard', click: () => {
-      mascotWindow?.hide()
+      aiMascotWindow?.hide()
       dashboardWindow?.show()
       dashboardWindow?.focus()
     }},
@@ -107,7 +135,7 @@ function createTray() {
   tray.setContextMenu(contextMenu)
   
   tray.on('click', () => {
-    mascotWindow?.hide()
+    aiMascotWindow?.hide()
     dashboardWindow?.show()
     dashboardWindow?.focus()
   })
@@ -119,9 +147,9 @@ function setupShortcutsAndListeners() {
   globalShortcut.register('CommandOrControl+`', () => {
     if (dashboardWindow?.isVisible()) {
       dashboardWindow.hide()
-      mascotWindow?.show()
+      aiMascotWindow?.show()
     } else {
-      mascotWindow?.hide()
+      aiMascotWindow?.hide()
       dashboardWindow?.show()
       dashboardWindow?.focus()
     }
@@ -134,12 +162,14 @@ function setupShortcutsAndListeners() {
   globalShortcut.register('CommandOrControl+Space', () => {
     // Determine which window is currently active/visible to avoid duplicate voice recording
     const isDashboardActive = dashboardWindow?.isVisible();
-    const activeWindow = isDashboardActive ? dashboardWindow : mascotWindow;
+    const activeWindow = isDashboardActive ? dashboardWindow : aiMascotWindow;
 
     // On KeyDown (or auto-repeat)
     if (!isVoiceHeld) {
       isVoiceHeld = true;
       activeWindow?.webContents.send('STT_START');
+      userMascotWindow?.webContents.send('STT_START');
+      userMascotWindow?.show(); // Show user mascot when talking
     }
 
     // Reset the timeout on every auto-repeat tick
@@ -149,6 +179,8 @@ function setupShortcutsAndListeners() {
     voiceTimeout = setTimeout(() => {
       isVoiceHeld = false;
       activeWindow?.webContents.send('STT_STOP');
+      userMascotWindow?.webContents.send('STT_STOP');
+      userMascotWindow?.hide(); // Hide user mascot when stopped
     }, 800);
   });
 }
@@ -158,6 +190,31 @@ app.whenReady().then(() => {
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
+  })
+
+  ipcMain.on('window-minimize', (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    win?.minimize()
+  })
+  
+  ipcMain.on('window-maximize', (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    if (win?.isMaximized()) {
+      win.unmaximize()
+    } else {
+      win?.maximize()
+    }
+  })
+
+  ipcMain.on('window-close', (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    // For dashboard, we hide it instead of closing to keep the app alive
+    if (win === dashboardWindow) {
+      win?.hide()
+      aiMascotWindow?.show()
+    } else {
+      win?.close()
+    }
   })
 
   createWindows()

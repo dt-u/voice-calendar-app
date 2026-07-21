@@ -4,9 +4,10 @@ import { MascotState } from '../../types';
 
 interface MascotProps {
   state: MascotState;
+  url?: string;
 }
 
-export const Mascot: React.FC<MascotProps> = ({ state }) => {
+export const Mascot: React.FC<MascotProps> = ({ state, url }) => {
   const getAnimationVariants = () => {
     switch (state) {
       case 'LISTENING':
@@ -59,21 +60,33 @@ export const Mascot: React.FC<MascotProps> = ({ state }) => {
       {/* Mascot Body */}
       <motion.div
         animate={getAnimationVariants()}
-        className={`w-24 h-24 rounded-full shadow-lg border-4 border-white/20 flex items-center justify-center ${getStatusColor()}`}
+        className={`relative z-10 w-16 h-16 overflow-hidden ${
+          url?.startsWith('data:') 
+            ? '' // No border/background for custom uploads
+            : `rounded-full border-4 border-slate-700 shadow-[0_0_15px_rgba(0,0,0,0.5)] ${getStatusColor()}`
+        }`}
       >
-        {/* Simple face */}
-        <div className="flex gap-3">
-          <motion.div 
-            className="w-3 h-3 bg-white rounded-full"
-            animate={state === 'SPEAKING' ? { scaleY: [1, 0.2, 1] } : {}}
-            transition={{ repeat: Infinity, duration: 0.2 }}
+        {url ? (
+          <img 
+            src={url} 
+            alt="AI Mascot" 
+            className={`w-full h-full object-cover ${url?.startsWith('data:') ? '' : 'bg-slate-800'}`}
           />
-          <motion.div 
-            className="w-3 h-3 bg-white rounded-full"
-            animate={state === 'SPEAKING' ? { scaleY: [1, 0.2, 1] } : {}}
-            transition={{ repeat: Infinity, duration: 0.2 }}
-          />
-        </div>
+        ) : (
+          /* Simple face fallback */
+          <div className="flex gap-3 items-center justify-center h-full">
+            <motion.div 
+              className="w-3 h-3 bg-white rounded-full"
+              animate={state === 'SPEAKING' ? { scaleY: [1, 0.2, 1] } : {}}
+              transition={{ repeat: Infinity, duration: 0.2 }}
+            />
+            <motion.div 
+              className="w-3 h-3 bg-white rounded-full"
+              animate={state === 'SPEAKING' ? { scaleY: [1, 0.2, 1] } : {}}
+              transition={{ repeat: Infinity, duration: 0.2 }}
+            />
+          </div>
+        )}
       </motion.div>
     </div>
   );
