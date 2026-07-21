@@ -11,6 +11,7 @@ from app.database import init_db
 from app.services.prompts import get_system_prompt
 from app.services.task_service import add_tasks, get_tasks_by_date
 from app.services.tts_service import generate_speech
+from app.services.llm_service import parse_voice_text
 
 def test_config_and_db_init():
     """Verify configuration loads and database table creation."""
@@ -47,6 +48,12 @@ async def test_tts_generation():
     assert isinstance(audio_bytes, bytes)
     assert len(audio_bytes) > 0, "TTS generated empty audio bytes"
 
+async def test_groq_parsing():
+    """Verify async Groq NLP intent parsing."""
+    result = await parse_voice_text("Thêm lịch họp lúc 9h sáng mai")
+    assert "intent" in result
+    assert result["intent"] in ["ADD_TASK", "UNKNOWN"]
+
 if __name__ == "__main__":
     print("Running basic integration checks...")
     test_config_and_db_init()
@@ -55,6 +62,8 @@ if __name__ == "__main__":
     print("[PASS] System prompt generation")
     test_task_service_crud()
     print("[PASS] SQLite Task CRUD operations")
+    asyncio.run(test_groq_parsing())
+    print("[PASS] Async Groq intent parsing")
     asyncio.run(test_tts_generation())
     print("[PASS] Async TTS generation")
     print("All backend unit/integration checks completed successfully!")

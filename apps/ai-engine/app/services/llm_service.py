@@ -1,24 +1,23 @@
 import json
 import logging
 from typing import Any, Dict
-from google import genai
-from google.genai import types
+from groq import AsyncGroq
 
 from app.config import settings
 from app.services.prompts import get_system_prompt
 
 logger = logging.getLogger(__name__)
 
-def _get_genai_client() -> genai.Client | None:
-    """Instantiate Gemini API client if API key is set."""
-    if not settings.gemini_api_key:
-        logger.warning("GEMINI_API_KEY is not configured.")
+def _get_groq_client() -> AsyncGroq | None:
+    """Instantiate Async Groq API client if API key is set."""
+    if not settings.groq_api_key:
+        logger.warning("GROQ_API_KEY is not configured.")
         return None
-    return genai.Client(api_key=settings.gemini_api_key)
+    return AsyncGroq(api_key=settings.groq_api_key)
 
-def parse_voice_text(user_text: str) -> Dict[str, Any]:
+async def parse_voice_text(user_text: str) -> Dict[str, Any]:
     """
-    Parse user voice/text input into structured intent and task JSON using Gemini API.
+    Parse user voice/text input into structured intent and task JSON using Groq API.
     """
     fallback_response: Dict[str, Any] = {
         "intent": "UNKNOWN",
@@ -29,32 +28,40 @@ def parse_voice_text(user_text: str) -> Dict[str, Any]:
     if not user_text or not user_text.strip():
         return fallback_response
 
-    client = _get_genai_client()
+    client = _get_groq_client()
     if client is None:
-        fallback_response["reply_text"] = "Chưa cấu hình GEMINI_API_KEY. Vui lòng kiểm tra file .env."
+        fallback_response["reply_text"] = "Chưa cấu hình GROQ_API_KEY. Vui lòng kiểm tra file .env."
         return fallback_response
 
     try:
         system_instruction = get_system_prompt()
-        config = types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            response_mime_type="application/json",
+        
+        response = await client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_text}
+            ],
+            model=settings.groq_model,
             temperature=0.2,
+            response_format={"type": "json_object"}
         )
-
-        # Use model specified in settings (e.g., gemini-2.0-flash)
-        response = client.models.generate_content(
-            model=settings.gemini_model,
-            contents=user_text,
-            config=config,
-        )
-
-        if not response.text:
+        
+        response_content = response.choices[0].message.content
+        if not response_content:
+            logger.error("Groq API returned an empty response.")
             return fallback_response
-
-        parsed_data = json.loads(response.text)
+            
+        logger.info(f"Groq intent parsing succeeded using model '{settings.groq_model}'.")
+        parsed_data = json.loads(response_content)
         return parsed_data
 
     except Exception as e:
-        logger.error(f"Error calling Gemini API: {e}", exc_info=True)
+        logger.error(f"Error calling Groq API: {e}", exc_info=True)
+        err_str = str(e).lower()
+        if "rate limit" in err_str or "429" in err_str:
+            fallback_response["reply_text"] = "Lỗi: Quá giới hạn request Groq API (Rate Limit). Vui lòng thử lại sau."
+        elif "503" in err_str or "unavailable" in err_str:
+            fallback_response["reply_text"] = "Lỗi: Hệ thống AI của Groq đang bị quá tải (503). Vui lòng thử lại sau vài phút."
+        else:
+            fallback_response["reply_text"] = f"Lỗi: Không thể kết nối tới AI. {e}"
         return fallback_response

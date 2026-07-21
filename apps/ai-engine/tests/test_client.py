@@ -17,7 +17,7 @@ async def test_websocket():
         # Send TEXT_INPUT prompt
         sample_input = {
             "type": "TEXT_INPUT",
-            "text": "Thêm lịch họp kế hoạch tuần mới vào 9h sáng mai"
+            "text": "Sáng 22/7 uống 3 lốc sữa, tối 23 ăn 1 quả dưa hấu"
         }
 
         print(f"\nSending payload: {sample_input}")

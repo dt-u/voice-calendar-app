@@ -23,6 +23,9 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             message = await websocket.receive()
+            if message.get("type") == "websocket.disconnect":
+                logger.info("WebSocket disconnect signal received.")
+                break
 
             # Case A: Incoming Text Frame (JSON Command)
             if "text" in message and message["text"]:
@@ -58,13 +61,15 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.error(f"WebSocket error: {e}", exc_info=True)
 
 
+import asyncio
+
 async def _handle_text_pipeline(websocket: WebSocket, user_text: str) -> None:
     """Execute NLP -> Task DB -> TTS pipeline for text input."""
-    # 1. Parse intent with Gemini LLM
-    parsed_intent = parse_voice_text(user_text)
+    # 1. Parse intent with Groq LLM (now natively async)
+    parsed_intent = await parse_voice_text(user_text)
 
     # 2. Perform DB operations
-    exec_result = process_intent_and_execute(parsed_intent)
+    exec_result = await asyncio.to_thread(process_intent_and_execute, parsed_intent)
 
     # 3. Synthesize Vietnamese TTS audio
     audio_bytes = await generate_speech(exec_result["reply_text"])
@@ -87,7 +92,7 @@ async def _handle_text_pipeline(websocket: WebSocket, user_text: str) -> None:
 async def _handle_voice_pipeline(websocket: WebSocket, audio_bytes: bytes) -> None:
     """Execute STT -> NLP -> Task DB -> TTS pipeline for audio bytes input."""
     # 1. Transcribe audio to text with Faster-Whisper
-    transcribed_text = stt_service.transcribe_audio(audio_bytes)
+    transcribed_text = await asyncio.to_thread(stt_service.transcribe_audio, audio_bytes)
 
     if not transcribed_text:
         await websocket.send_json({

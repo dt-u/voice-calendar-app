@@ -46,7 +46,7 @@ def health_check():
         "config": {
             "whisper_model": settings.whisper_model,
             "tts_voice": settings.tts_voice,
-            "gemini_api_configured": bool(settings.gemini_api_key),
+            "groq_api_configured": bool(settings.groq_api_key),
             "database_path": settings.database_path
         }
     }
