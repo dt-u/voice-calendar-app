@@ -66,7 +66,16 @@ export const useWebSocket = (
 
   useEffect(() => {
     connect();
+
+    const handleFocus = () => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'GET_ALL_TASKS' }));
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+
     return () => {
+      window.removeEventListener('focus', handleFocus);
       if (wsRef.current) {
         wsRef.current.close();
       }
