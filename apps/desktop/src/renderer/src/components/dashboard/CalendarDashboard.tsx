@@ -5,8 +5,9 @@ const { Solar, Lunar } = lunar;
 import { TaskList } from '../widgets/TaskList';
 import { QuickInput } from '../widgets/QuickInput';
 import { TaskModal } from '../widgets/TaskModal';
+import { SettingsModal } from '../widgets/SettingsModal';
 import { Toaster, toast } from 'sonner';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Mic, Plus, LayoutGrid, List, LayoutList, Trash2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Mic, Plus, LayoutGrid, List, LayoutList, Trash2, X, Settings, Minus, Square } from 'lucide-react';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import { useAudioPlayer } from '../../hooks/useAudioPlayer';
@@ -22,6 +23,22 @@ export const CalendarDashboard: React.FC = () => {
   // Task Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Partial<Task> | null>(null);
+
+  // Settings Modal state
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [dashboardOpacity, setDashboardOpacity] = useState(0.95);
+
+  useEffect(() => {
+    const updateOpacity = () => {
+      const savedOpacity = localStorage.getItem('dashboardOpacity');
+      if (savedOpacity) setDashboardOpacity(parseFloat(savedOpacity));
+    };
+    updateOpacity();
+    
+    // Listen for custom event from SettingsModal
+    window.addEventListener('local-storage-update', updateOpacity);
+    return () => window.removeEventListener('local-storage-update', updateOpacity);
+  }, []);
 
   const { playAudio } = useAudioPlayer();
 
@@ -222,14 +239,42 @@ export const CalendarDashboard: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen bg-gray-950 text-white overflow-hidden pointer-events-auto">
+    <div 
+      className="flex h-screen text-white overflow-hidden pointer-events-auto"
+      style={{ backgroundColor: `rgba(3, 7, 18, ${dashboardOpacity})` }}
+    >
       <Toaster theme="dark" position="bottom-right" />
       {/* Main Area */}
-      <div className={`flex flex-col p-8 no-drag-region overflow-hidden ${viewMode === 'agenda' ? 'w-full' : 'flex-1'}`}>
+      <div className={`flex flex-col no-drag-region overflow-hidden ${viewMode === 'agenda' ? 'w-full' : 'flex-1'}`}>
         
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8 drag-region">
-          <div className="flex items-center gap-4">
+        {/* Custom Window Controls (Title Bar) */}
+        <div className="flex justify-end items-center px-4 py-2 drag-region">
+          <div className="flex items-center gap-1 no-drag-region">
+            <button 
+              onClick={() => window.api?.minimizeWindow?.()} 
+              className="p-1.5 hover:bg-gray-800 rounded-md text-gray-400 hover:text-white transition-colors"
+            >
+              <Minus size={16} />
+            </button>
+            <button 
+              onClick={() => window.api?.maximizeWindow?.()} 
+              className="p-1.5 hover:bg-gray-800 rounded-md text-gray-400 hover:text-white transition-colors"
+            >
+              <Square size={14} />
+            </button>
+            <button 
+              onClick={() => window.api?.closeWindow?.()} 
+              className="p-1.5 hover:bg-red-500 rounded-md text-gray-400 hover:text-white transition-colors"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 flex flex-col px-8 pb-8 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-4 drag-region">
             <div className="p-3 bg-blue-600 rounded-xl">
               <CalendarIcon size={24} />
             </div>
@@ -280,6 +325,15 @@ export const CalendarDashboard: React.FC = () => {
                 </button>
               </div>
             )}
+            
+            {/* Settings Button */}
+            <button 
+              onClick={() => setIsSettingsOpen(true)}
+              className="p-2 ml-2 hover:bg-gray-800 rounded-lg transition-colors text-gray-400 hover:text-white"
+              title="Settings"
+            >
+              <Settings size={20} />
+            </button>
           </div>
         </div>
 
@@ -392,6 +446,7 @@ export const CalendarDashboard: React.FC = () => {
             </div>
           </>
         )}
+        </div>
       </div>
 
       {/* Right Sidebar - Conditionally Rendered */}
@@ -468,6 +523,12 @@ export const CalendarDashboard: React.FC = () => {
         initialData={editingTask}
         selectedDate={selectedDate}
         onSave={handleModalSubmit}
+      />
+
+      {/* Settings Modal */}
+      <SettingsModal 
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
       />
     </div>
   );
