@@ -11,8 +11,8 @@ let isAppQuitting = false
 function createWindows(): void {
   const primaryDisplay = screen.getPrimaryDisplay()
   const { width, height } = primaryDisplay.workAreaSize
-  const MASCOT_WIDTH = 200;
-  const MASCOT_HEIGHT = 280;
+  const MASCOT_WIDTH = 120;
+  const MASCOT_HEIGHT = 160;
 
   // 1. Mascot Overlay Window (Transparent, always-on-top, click-through)
   mascotWindow = new BrowserWindow({
@@ -132,11 +132,14 @@ function setupShortcutsAndListeners() {
   let isVoiceHeld = false;
 
   globalShortcut.register('CommandOrControl+Space', () => {
+    // Determine which window is currently active/visible to avoid duplicate voice recording
+    const isDashboardActive = dashboardWindow?.isVisible();
+    const activeWindow = isDashboardActive ? dashboardWindow : mascotWindow;
+
     // On KeyDown (or auto-repeat)
     if (!isVoiceHeld) {
       isVoiceHeld = true;
-      dashboardWindow?.webContents.send('STT_START');
-      mascotWindow?.webContents.send('STT_START');
+      activeWindow?.webContents.send('STT_START');
     }
 
     // Reset the timeout on every auto-repeat tick
@@ -145,8 +148,7 @@ function setupShortcutsAndListeners() {
     // If no tick is received for 800ms (covers max OS keyboard delay), assume KeyUp
     voiceTimeout = setTimeout(() => {
       isVoiceHeld = false;
-      dashboardWindow?.webContents.send('STT_STOP');
-      mascotWindow?.webContents.send('STT_STOP');
+      activeWindow?.webContents.send('STT_STOP');
     }, 800);
   });
 }
