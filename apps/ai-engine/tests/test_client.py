@@ -1,6 +1,11 @@
 import asyncio
 import json
+import sys
 import websockets
+
+# Ensure UTF-8 output formatting on Windows terminals
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8")
 
 async def test_websocket():
     uri = "ws://127.0.0.1:8000/ws"
@@ -19,7 +24,7 @@ async def test_websocket():
         await websocket.send(json.dumps(sample_input))
 
         # Receive Frame 1: JSON Metadata
-        frame1 = await websocket.receive()
+        frame1 = await websocket.recv()
         if isinstance(frame1, str):
             metadata = json.loads(frame1)
             print("\nReceived Frame 1 (JSON Metadata):")
@@ -28,7 +33,7 @@ async def test_websocket():
             has_audio = metadata.get("has_audio", False)
             if has_audio:
                 # Receive Frame 2: Binary Audio MP3
-                frame2 = await websocket.receive()
+                frame2 = await websocket.recv()
                 if isinstance(frame2, bytes):
                     output_file = "test_output.mp3"
                     with open(output_file, "wb") as f:

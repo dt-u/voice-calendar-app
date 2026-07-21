@@ -7,6 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 class Settings(BaseSettings):
     gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash"
     host: str = "127.0.0.1"
     port: int = 8000
     whisper_model: str = "base"

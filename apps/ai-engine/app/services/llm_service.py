@@ -42,9 +42,9 @@ def parse_voice_text(user_text: str) -> Dict[str, Any]:
             temperature=0.2,
         )
 
-        # Using gemini-2.5-flash or default flash model
+        # Use model specified in settings (e.g., gemini-2.0-flash)
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=settings.gemini_model,
             contents=user_text,
             config=config,
         )
