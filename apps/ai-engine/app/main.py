@@ -19,12 +19,6 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing database schema...")
     init_db()
 
-    logger.info("Pre-loading Speech-To-Text model...")
-    try:
-        stt_service.load_model()
-    except Exception as e:
-        logger.warning(f"Whisper STT model pre-loading skipped or failed: {e}")
-
     logger.info("AI Engine startup completed.")
     yield
     logger.info("AI Engine shutting down.")

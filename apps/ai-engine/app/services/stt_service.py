@@ -1,68 +1,57 @@
 import io
 import logging
-import tempfile
-from typing import Optional
-from faster_whisper import WhisperModel
-
+from groq import AsyncGroq
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 class STTService:
-    """Singleton Speech-To-Text service wrapping Faster-Whisper model."""
-    _instance: Optional["STTService"] = None
-    _model: Optional[WhisperModel] = None
+    """Singleton Speech-To-Text service using Groq Whisper Cloud API."""
+    _instance = None
+    _client = None
 
-    def __new__(cls) -> "STTService":
+    def __new__(cls):
         if cls._instance is None:
             cls._instance = super(STTService, cls).__new__(cls)
         return cls._instance
 
-    def load_model(self) -> None:
-        """Load Faster-Whisper model into memory if not already loaded."""
-        if self._model is None:
-            model_name = settings.whisper_model
-            logger.info(f"Initializing Faster-Whisper model: '{model_name}' on CPU...")
-            # Use int8 compute_type for optimized CPU execution
-            self._model = WhisperModel(model_name, device="cpu", compute_type="int8")
-            logger.info("Faster-Whisper model successfully loaded into RAM.")
+    def _get_client(self) -> AsyncGroq:
+        if self._client is None:
+            if not settings.groq_api_key:
+                raise ValueError("GROQ_API_KEY is not set.")
+            self._client = AsyncGroq(api_key=settings.groq_api_key)
+        return self._client
 
-    def transcribe_audio(self, audio_bytes: bytes, language: str = "vi") -> str:
+    async def transcribe_audio(self, audio_bytes: bytes) -> str:
         """
-        Transcribe raw audio bytes to text string.
-        Accepts binary audio data (WAV, MP3, WEBM, OGG).
+        Transcribe raw audio bytes to text string using Groq Whisper.
         """
         if not audio_bytes:
             return ""
 
-        self.load_model()
-        assert self._model is not None, "STT model failed to initialize."
+        client = self._get_client()
 
-        # Write bytes to temporary file for Faster-Whisper decoder
-        # Windows requires delete=False so external processes (ffmpeg) can access the file
-        import os
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
-            temp_file.write(audio_bytes)
-            temp_file.flush()
-            temp_path = temp_file.name
+        # Wrap bytes in a tuple with a dummy filename, as expected by Groq API for files
+        file_tuple = ("audio.webm", audio_bytes)
 
         try:
-            segments, info = self._model.transcribe(
-                temp_path,
-                language=language,
-                beam_size=5,
-                vad_filter=False
+            # Call Groq's whisper-large-v3 transcription endpoint
+            transcription = await client.audio.transcriptions.create(
+                file=file_tuple,
+                model="whisper-large-v3",
+                language="vi",
+                prompt="Danh sách công việc, lịch trình, nhắc nhở, cuộc họp bằng tiếng Việt.",
+                response_format="text"
             )
 
-            text_parts = [segment.text.strip() for segment in segments]
-            full_text = " ".join(text_parts).strip()
-            logger.info(f"STT Transcription ({info.language}): '{full_text}'")
+            # In 'text' response format, the response is simply the string text
+            full_text = str(transcription).strip()
+            logger.info(f"Groq STT Transcription: '{full_text}'")
             return full_text
-        finally:
-            try:
-                os.remove(temp_path)
-            except OSError:
-                pass
+
+        except Exception as e:
+            logger.error(f"Groq STT Error: {e}", exc_info=True)
+            return ""
 
 # Singleton instance
 stt_service = STTService()

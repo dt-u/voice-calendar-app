@@ -91,9 +91,10 @@ async def _handle_text_pipeline(websocket: WebSocket, user_text: str) -> None:
 
 async def _handle_voice_pipeline(websocket: WebSocket, audio_bytes: bytes) -> None:
     """Execute STT -> NLP -> Task DB -> TTS pipeline for audio bytes input."""
-    # 1. Transcribe audio to text with Faster-Whisper
+    # 1. Transcribe audio to text with Groq Whisper
     try:
-        transcribed_text = await asyncio.to_thread(stt_service.transcribe_audio, audio_bytes)
+        transcribed_text = await stt_service.transcribe_audio(audio_bytes)
+        logger.info(f'[STT Output]: "{transcribed_text}"')
     except Exception as e:
         logger.error(f"STT decoding failed: {e}")
         transcribed_text = ""
