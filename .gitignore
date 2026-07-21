@@ -36,3 +36,8 @@ Thumbs.db
 *.webp
 /apps/desktop/src/assets/mascot/
 /apps/desktop/public/mascot/
+
+# Project specifics
+.agents/
+rules/
+PROJECT_CONTEXT.md
