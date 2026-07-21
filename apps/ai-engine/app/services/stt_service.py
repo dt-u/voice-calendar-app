@@ -39,21 +39,30 @@ class STTService:
         assert self._model is not None, "STT model failed to initialize."
 
         # Write bytes to temporary file for Faster-Whisper decoder
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as temp_file:
+        # Windows requires delete=False so external processes (ffmpeg) can access the file
+        import os
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
             temp_file.write(audio_bytes)
             temp_file.flush()
+            temp_path = temp_file.name
 
+        try:
             segments, info = self._model.transcribe(
-                temp_file.name,
+                temp_path,
                 language=language,
                 beam_size=5,
-                vad_filter=True
+                vad_filter=False
             )
 
             text_parts = [segment.text.strip() for segment in segments]
             full_text = " ".join(text_parts).strip()
             logger.info(f"STT Transcription ({info.language}): '{full_text}'")
             return full_text
+        finally:
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
 
 # Singleton instance
 stt_service = STTService()

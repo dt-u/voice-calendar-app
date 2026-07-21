@@ -92,17 +92,27 @@ async def _handle_text_pipeline(websocket: WebSocket, user_text: str) -> None:
 async def _handle_voice_pipeline(websocket: WebSocket, audio_bytes: bytes) -> None:
     """Execute STT -> NLP -> Task DB -> TTS pipeline for audio bytes input."""
     # 1. Transcribe audio to text with Faster-Whisper
-    transcribed_text = await asyncio.to_thread(stt_service.transcribe_audio, audio_bytes)
+    try:
+        transcribed_text = await asyncio.to_thread(stt_service.transcribe_audio, audio_bytes)
+    except Exception as e:
+        logger.error(f"STT decoding failed: {e}")
+        transcribed_text = ""
 
     if not transcribed_text:
+        reply_msg = "Không thể nhận dạng được âm thanh. Vui lòng thử lại."
+        error_audio = await generate_speech(reply_msg)
+        
         await websocket.send_json({
             "type": "RESPONSE_METADATA",
             "user_text": "",
             "intent": "UNKNOWN",
-            "reply_text": "Không thể nhận dạng được âm thanh. Vui lòng thử lại.",
+            "reply_text": reply_msg,
             "tasks": [],
-            "has_audio": False
+            "has_audio": bool(error_audio)
         })
+        
+        if error_audio:
+            await websocket.send_bytes(error_audio)
         return
 
     # 2-5. Execute standard pipeline with transcribed text
