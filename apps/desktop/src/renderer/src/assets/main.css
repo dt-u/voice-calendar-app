@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@layer base {
+  body, html {
+    background-color: transparent;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+  }
+  
+  #root {
+    width: 100vw;
+    height: 100vh;
+  }
+}
+
+/* Allow click-through on transparent areas, block on interactive ones */
+.drag-region {
+  -webkit-app-region: drag;
+  pointer-events: auto;
+}
+
+.no-drag-region {
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
+}
