@@ -1,0 +1,38 @@
+# Node dependencies & build
+node_modules/
+dist/
+build/
+.out/
+
+# Python environments & cache
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# SQLite Database & Storage
+*.db
+*.sqlite
+*.sqlite3
+/storage/audio/
+
+# Environment variables
+.env
+.env.local
+
+# IDE & System files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Mascot Assets & Private Media
+*.png
+*.jpg
+*.jpeg
+*.svg
+*.gif
+*.webp
+/apps/desktop/src/assets/mascot/
+/apps/desktop/public/mascot/
