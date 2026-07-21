@@ -16,12 +16,32 @@ def init_db():
         task_date DATE NOT NULL,
         time_slot VARCHAR(20),
         exact_time TIME,
+        start_time TIME,
+        end_time TIME,
         content TEXT NOT NULL,
+        note TEXT,
         is_important TINYINT(1) DEFAULT 0,
         is_completed TINYINT(1) DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     """)
+
+    # Migrations for existing databases
+    try:
+        cursor.execute("ALTER TABLE tasks ADD COLUMN start_time TIME;")
+    except sqlite3.OperationalError:
+        pass # Column already exists
+    
+    try:
+        cursor.execute("ALTER TABLE tasks ADD COLUMN end_time TIME;")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE tasks ADD COLUMN note TEXT;")
+    except sqlite3.OperationalError:
+        pass
+
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS app_settings (

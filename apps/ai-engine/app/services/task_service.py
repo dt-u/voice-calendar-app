@@ -24,6 +24,9 @@ def add_tasks(tasks_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             task_date = item.get("task_date") or datetime.now().strftime("%Y-%m-%d")
             time_slot = item.get("time_slot")
             exact_time = item.get("exact_time")
+            start_time = item.get("start_time")
+            end_time = item.get("end_time")
+            note = item.get("note")
             content = item.get("content", "").strip()
             is_important = 1 if item.get("is_important") else 0
 
@@ -31,16 +34,19 @@ def add_tasks(tasks_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 continue
 
             cursor.execute("""
-                INSERT INTO tasks (id, task_date, time_slot, exact_time, content, is_important, is_completed)
-                VALUES (?, ?, ?, ?, ?, ?, 0)
-            """, (task_id, task_date, time_slot, exact_time, content, is_important))
+                INSERT INTO tasks (id, task_date, time_slot, exact_time, start_time, end_time, content, note, is_important, is_completed)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            """, (task_id, task_date, time_slot, exact_time, start_time, end_time, content, note, is_important))
 
             created_tasks.append({
                 "id": task_id,
                 "task_date": task_date,
                 "time_slot": time_slot,
                 "exact_time": exact_time,
+                "start_time": start_time,
+                "end_time": end_time,
                 "content": content,
+                "note": note,
                 "is_important": bool(is_important),
                 "is_completed": False
             })
@@ -66,10 +72,10 @@ def get_tasks_by_date(task_date: Optional[str] = None) -> List[Dict[str, Any]]:
 
     try:
         cursor.execute("""
-            SELECT id, task_date, time_slot, exact_time, content, is_important, is_completed, created_at
+            SELECT id, task_date, time_slot, exact_time, start_time, end_time, content, note, is_important, is_completed, created_at
             FROM tasks
             WHERE task_date = ?
-            ORDER BY exact_time ASC, created_at ASC
+            ORDER BY exact_time ASC, start_time ASC, created_at ASC
         """, (target_date,))
 
         rows = cursor.fetchall()
@@ -80,7 +86,10 @@ def get_tasks_by_date(task_date: Optional[str] = None) -> List[Dict[str, Any]]:
                 "task_date": row["task_date"],
                 "time_slot": row["time_slot"],
                 "exact_time": row["exact_time"],
+                "start_time": row["start_time"],
+                "end_time": row["end_time"],
                 "content": row["content"],
+                "note": row["note"],
                 "is_important": bool(row["is_important"]),
                 "is_completed": bool(row["is_completed"]),
                 "created_at": str(row["created_at"])
@@ -93,29 +102,134 @@ def get_tasks_by_date(task_date: Optional[str] = None) -> List[Dict[str, Any]]:
     finally:
         conn.close()
 
-def process_intent_and_execute(parsed_intent: Dict[str, Any]) -> Dict[str, Any]:
+def get_all_tasks() -> List[Dict[str, Any]]:
     """
-    Execute database actions according to intent returned by Gemini NLP.
+    Retrieve all tasks in the database to populate the calendar grid.
     """
-    intent = parsed_intent.get("intent", "UNKNOWN")
-    raw_tasks = parsed_intent.get("tasks", [])
-    reply_text = parsed_intent.get("reply_text", "")
+    conn = get_db_connection()
+    cursor = conn.cursor()
 
-    result_tasks: List[Dict[str, Any]] = []
+    try:
+        cursor.execute("""
+            SELECT id, task_date, time_slot, exact_time, start_time, end_time, content, note, is_important, is_completed, created_at
+            FROM tasks
+            ORDER BY task_date ASC, exact_time ASC, start_time ASC, created_at ASC
+        """)
 
-    if intent == "ADD_TASK":
-        result_tasks = add_tasks(raw_tasks)
-    elif intent == "GET_TASKS":
-        target_date = raw_tasks[0].get("task_date") if raw_tasks else None
-        result_tasks = get_tasks_by_date(target_date)
-        if result_tasks:
-            task_list_str = "; ".join([t['content'] for t in result_tasks])
-            reply_text = f"Bạn có {len(result_tasks)} công việc: {task_list_str}"
-        else:
-            reply_text = "Bạn không có công việc nào trong danh sách cho ngày này."
+        rows = cursor.fetchall()
+        tasks = []
+        for row in rows:
+            tasks.append({
+                "id": row["id"],
+                "task_date": row["task_date"],
+                "time_slot": row["time_slot"],
+                "exact_time": row["exact_time"],
+                "start_time": row["start_time"],
+                "end_time": row["end_time"],
+                "content": row["content"],
+                "note": row["note"],
+                "is_important": bool(row["is_important"]),
+                "is_completed": bool(row["is_completed"]),
+                "created_at": str(row["created_at"])
+            })
+        return tasks
 
-    return {
-        "intent": intent,
-        "reply_text": reply_text,
-        "tasks": result_tasks
-    }
+    except Exception as e:
+        logger.error(f"Error querying all tasks from database: {e}", exc_info=True)
+        return []
+    finally:
+        conn.close()
+
+def update_task(task_id: str, updates: Dict[str, Any]) -> bool:
+    """
+    Update an existing task dynamically.
+    """
+    if not updates:
+        return False
+        
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        set_clauses = []
+        values = []
+        for key, val in updates.items():
+            if key in ['task_date', 'time_slot', 'exact_time', 'start_time', 'end_time', 'content', 'note', 'is_important', 'is_completed']:
+                set_clauses.append(f"{key} = ?")
+                # Handle booleans for sqlite
+                if isinstance(val, bool):
+                    values.append(1 if val else 0)
+                else:
+                    values.append(val)
+                    
+        if not set_clauses:
+            return False
+            
+        values.append(task_id)
+        query = f"UPDATE tasks SET {', '.join(set_clauses)} WHERE id = ?"
+        cursor.execute(query, tuple(values))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error updating task {task_id}: {e}", exc_info=True)
+        return False
+    finally:
+        conn.close()
+
+def delete_task(task_id: str) -> bool:
+    """
+    Delete a task from the database.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error deleting task {task_id}: {e}", exc_info=True)
+        return False
+    finally:
+        conn.close()
+
+def search_tasks_by_query(query: str, target_date: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Fuzzy search for tasks matching the given query string. 
+    Useful for LLM to find the correct task ID to update/delete.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        sql = "SELECT * FROM tasks WHERE content LIKE ?"
+        params = [f"%{query}%"]
+        
+        if target_date:
+            sql += " AND task_date = ?"
+            params.append(target_date)
+            
+        cursor.execute(sql, tuple(params))
+        rows = cursor.fetchall()
+        
+        tasks = []
+        for row in rows:
+            tasks.append({
+                "id": row["id"],
+                "task_date": row["task_date"],
+                "time_slot": row["time_slot"],
+                "exact_time": row["exact_time"],
+                "start_time": row["start_time"],
+                "end_time": row["end_time"],
+                "content": row["content"],
+                "note": row["note"],
+                "is_important": bool(row["is_important"]),
+                "is_completed": bool(row["is_completed"]),
+                "created_at": str(row["created_at"])
+            })
+        return tasks
+    except Exception as e:
+        logger.error(f"Error searching tasks: {e}", exc_info=True)
+        return []
+    finally:
+        conn.close()
