@@ -9,6 +9,8 @@ export const useWebSocket = (
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
+  const [isProcessing, setIsProcessing] = useState(false);
+
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
@@ -17,6 +19,8 @@ export const useWebSocket = (
     ws.onopen = () => {
       console.log('Connected to AI Engine');
       setIsConnected(true);
+      // Fetch all tasks on connect
+      ws.send(JSON.stringify({ type: 'GET_ALL_TASKS' }));
     };
 
     ws.onclose = () => {
@@ -45,6 +49,7 @@ export const useWebSocket = (
           const data = JSON.parse(event.data) as ResponseMetadata;
           if (data.type === 'RESPONSE_METADATA') {
             setMetadata(data);
+            setIsProcessing(false);
             if (!data.has_audio) {
               // If there's no audio expected, return to IDLE after a short delay
               setTimeout(() => onStateChange('IDLE'), 3000);
@@ -69,20 +74,53 @@ export const useWebSocket = (
   }, [connect]);
 
   const sendText = useCallback((text: string) => {
+    if (isProcessing) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) {
+      setIsProcessing(true);
       onStateChange('THINKING');
       wsRef.current.send(JSON.stringify({ type: 'TEXT_INPUT', text }));
     }
-  }, [onStateChange]);
+  }, [isProcessing, onStateChange]);
 
   const sendVoice = useCallback(async (audioBlob: Blob) => {
+    if (isProcessing) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) {
+      setIsProcessing(true);
       onStateChange('THINKING');
       
       // The backend expects a raw binary frame for audio, not JSON.
       wsRef.current.send(audioBlob);
     }
-  }, [onStateChange]);
+  }, [isProcessing, onStateChange]);
 
-  return { isConnected, metadata, sendText, sendVoice };
+  const sendManualTask = useCallback((taskDate: string, content: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ 
+        type: 'ADD_MANUAL_TASK', 
+        task_date: taskDate,
+        content 
+      }));
+    }
+  }, []);
+
+  const updateTask = useCallback((taskId: string, updates: any) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'UPDATE_TASK',
+        task_id: taskId,
+        updates
+      }));
+    }
+  }, []);
+
+  const deleteTask = useCallback((taskId: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'DELETE_TASK',
+        task_id: taskId
+      }));
+    }
+  }, []);
+
+  return { isConnected, isProcessing, metadata, sendText, sendVoice, sendManualTask, updateTask, deleteTask };
 };
